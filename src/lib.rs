@@ -38,7 +38,7 @@ pub fn run_scan(
         models::ScanMode::Full
     };
 
-    let rules = rules::load_builtin_rules()?;
+    let rules = rules::load_rules(&root)?;
     let (lines, head_oid) = scanner::walk_diffs(&root, since)?;
 
     let commits_scanned = lines.iter().map(|l| &l.commit_sha).collect::<HashSet<_>>().len();
