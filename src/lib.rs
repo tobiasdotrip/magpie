@@ -4,3 +4,4 @@ pub mod rules;
 pub mod output;
 pub mod scanner;
 pub mod scoring;
+pub mod engine;
