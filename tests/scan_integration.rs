@@ -225,3 +225,129 @@ fn allowlist_with_commit_pin() {
         .unwrap();
     assert!(!output.status.success(), "Wrong commit pin should not suppress finding");
 }
+
+#[test]
+fn watch_detects_staged_secret() {
+    let dir = TempDir::new().unwrap();
+    let p = dir.path();
+    let bin = env!("CARGO_BIN_EXE_magpie");
+
+    run_git(p, &["init"]);
+    run_git(p, &["config", "user.email", "t@t.com"]);
+    run_git(p, &["config", "user.name", "T"]);
+    std::fs::write(p.join("readme.md"), "# test\n").unwrap();
+    run_git(p, &["add", "."]);
+    run_git(p, &["commit", "-m", "init"]);
+
+    std::fs::write(p.join(".env"), "AWS_ACCESS_KEY_ID=AKIAIOSFODNN7EXAMPLE\n").unwrap();
+    run_git(p, &["add", ".env"]);
+
+    let output = Command::new(bin)
+        .args(["watch", p.to_str().unwrap()])
+        .output()
+        .unwrap();
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(!output.status.success(), "Should exit 1 for staged secret");
+    assert!(stdout.contains("aws-access-key-id"));
+    assert!(stdout.contains("(watch)"));
+}
+
+#[test]
+fn watch_nothing_staged_exits_zero() {
+    let dir = TempDir::new().unwrap();
+    let p = dir.path();
+    let bin = env!("CARGO_BIN_EXE_magpie");
+
+    run_git(p, &["init"]);
+    run_git(p, &["config", "user.email", "t@t.com"]);
+    run_git(p, &["config", "user.name", "T"]);
+    std::fs::write(p.join("readme.md"), "# test\n").unwrap();
+    run_git(p, &["add", "."]);
+    run_git(p, &["commit", "-m", "init"]);
+
+    let output = Command::new(bin)
+        .args(["watch", p.to_str().unwrap()])
+        .output()
+        .unwrap();
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(output.status.success());
+    assert!(stdout.contains("nothing staged"));
+}
+
+#[test]
+fn watch_respects_allowlist() {
+    let dir = TempDir::new().unwrap();
+    let p = dir.path();
+    let bin = env!("CARGO_BIN_EXE_magpie");
+
+    run_git(p, &["init"]);
+    run_git(p, &["config", "user.email", "t@t.com"]);
+    run_git(p, &["config", "user.name", "T"]);
+    std::fs::write(p.join("readme.md"), "# test\n").unwrap();
+    run_git(p, &["add", "."]);
+    run_git(p, &["commit", "-m", "init"]);
+
+    std::fs::write(p.join(".env"), "AWS_ACCESS_KEY_ID=AKIAIOSFODNN7EXAMPLE\n").unwrap();
+    std::fs::write(p.join(".magpie-allow"), "aws-access-key-id:.env\n").unwrap();
+    run_git(p, &["add", ".env"]);
+
+    let output = Command::new(bin)
+        .args(["watch", p.to_str().unwrap()])
+        .output()
+        .unwrap();
+    assert!(output.status.success(), "Allowlisted staged finding should not cause exit 1");
+}
+
+#[test]
+fn scan_with_custom_rules() {
+    let dir = TempDir::new().unwrap();
+    let p = dir.path();
+    let bin = env!("CARGO_BIN_EXE_magpie");
+
+    run_git(p, &["init"]);
+    run_git(p, &["config", "user.email", "t@t.com"]);
+    run_git(p, &["config", "user.name", "T"]);
+
+    std::fs::write(p.join("config.txt"), "CUSTOM_ABCDEFGHIJ\n").unwrap();
+    std::fs::write(
+        p.join(".magpie.toml"),
+        r#"
+[[rules]]
+id = "custom-key"
+description = "Custom Key"
+pattern = 'CUSTOM_[A-Z]{10}'
+"#,
+    ).unwrap();
+    run_git(p, &["add", "."]);
+    run_git(p, &["commit", "-m", "init"]);
+
+    let output = Command::new(bin)
+        .args(["scan", "--full", p.to_str().unwrap(), "--format", "json"])
+        .output()
+        .unwrap();
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let parsed: serde_json::Value = serde_json::from_str(&stdout).unwrap();
+    let findings = parsed["findings"].as_array().unwrap();
+    assert!(findings.iter().any(|f| f["rule_id"] == "custom-key"));
+}
+
+#[test]
+fn scan_with_disable_rules() {
+    let dir = create_repo_with_secret();
+    let p = dir.path();
+    let bin = env!("CARGO_BIN_EXE_magpie");
+
+    std::fs::write(
+        p.join(".magpie.toml"),
+        r#"
+[config]
+disable_rules = ["aws-access-key-id"]
+"#,
+    ).unwrap();
+
+    let output = Command::new(bin)
+        .args(["scan", "--full", p.to_str().unwrap()])
+        .output()
+        .unwrap();
+    assert!(output.status.success(), "Disabled rule should not produce findings");
+}
