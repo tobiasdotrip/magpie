@@ -23,7 +23,7 @@ impl Allowlist {
                 && entry
                     .commit_sha
                     .as_deref()
-                    .map_or(true, |sha| sha == finding.commit_sha)
+                    .is_none_or(|sha| sha == finding.commit_sha)
         })
     }
 

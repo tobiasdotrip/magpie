@@ -2,7 +2,7 @@
 
 > Fast, zero-config git secret scanner. Single binary, built-in rules, confidence scoring.
 
-![version](https://img.shields.io/badge/version-0.2.0-blue)
+![version](https://img.shields.io/badge/version-0.3.0-blue)
 ![rust](https://img.shields.io/badge/rust-2021-orange)
 
 magpie scans git history for exposed secrets — API keys, tokens, private keys, high-entropy strings. It walks diffs commit-by-commit, so you see exactly when a secret was introduced.
@@ -117,6 +117,43 @@ Format: `rule_id:file_glob[:commit_sha]`
 - Without commit — finding ignored everywhere
 - With commit (7-char SHA) — ignored only in that commit
 
+## Pre-commit hook (`magpie watch`)
+
+`magpie watch` scans staged changes (equivalent to `git diff --cached`) for secrets. Same rules, scoring, and allowlist as `scan`.
+
+```bash
+magpie watch
+```
+
+Integrate with your hook framework:
+
+```yaml
+# .pre-commit-config.yaml
+- repo: local
+  hooks:
+    - id: magpie
+      name: magpie secret scan
+      entry: magpie watch
+      language: system
+```
+
+## Custom rules
+
+Create `.magpie.toml` at the repo root to add rules or disable built-in ones:
+
+```toml
+[config]
+disable_rules = ["generic-secret", "jwt"]
+
+[[rules]]
+id = "internal-api-key"
+description = "Internal API Key"
+pattern = 'INTERNAL_[A-Z0-9]{32}'
+keywords = ["INTERNAL_"]
+```
+
+Custom rules use the same format as built-in rules. They apply to both `scan` and `watch`.
+
 ## Incremental scan
 
 After the first scan, magpie stores the last scanned commit in `.magpie-state` and only scans new commits on subsequent runs.
@@ -139,5 +176,5 @@ Add `.magpie-state` to your `.gitignore` — it's local state, not meant to be s
 
 ## Roadmap
 
-- **v0.3.0** — `magpie watch` (pre-commit hook) + custom rules (`.magpie.toml`)
 - **v0.4.0** — `magpie nest` (local findings dashboard via SQLite)
+- `magpie shiny` — list detectable patterns
