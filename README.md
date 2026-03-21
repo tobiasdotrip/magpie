@@ -1,13 +1,12 @@
 <p align="center">
   <img src="assets/logo.jpg" alt="magpie" width="500">
+  <h1 align="center">magpie</h1>
+  <p align="center"><em>Fast, zero-config git secret scanner. Single binary, built-in rules, confidence scoring.</em></p>
+  <p align="center">
+    <img src="https://img.shields.io/badge/version-0.5.0-blue" alt="version">
+    <img src="https://img.shields.io/badge/rust-2021-orange" alt="rust">
+  </p>
 </p>
-
-# magpie
-
-> Fast, zero-config git secret scanner. Single binary, built-in rules, confidence scoring.
-
-![version](https://img.shields.io/badge/version-0.5.0-blue)
-![rust](https://img.shields.io/badge/rust-2021-orange)
 
 magpie scans git history for exposed secrets — API keys, tokens, private keys, high-entropy strings. It walks diffs commit-by-commit, so you see exactly when a secret was introduced.
 
