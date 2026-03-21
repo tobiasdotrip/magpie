@@ -1,4 +1,4 @@
-use git2::{DiffOptions, Repository};
+use git2::{DiffOptions, Oid, Repository};
 use std::path::Path;
 
 #[derive(Debug, Clone)]
@@ -9,11 +9,26 @@ pub struct DiffLine {
     pub line_number: usize,
 }
 
-pub fn walk_diffs(repo_path: &Path) -> Result<Vec<DiffLine>, Box<dyn std::error::Error>> {
+pub fn walk_diffs(
+    repo_path: &Path,
+    since: Option<Oid>,
+) -> Result<(Vec<DiffLine>, Oid), Box<dyn std::error::Error>> {
     let repo = Repository::open(repo_path)?;
+    let head_oid = repo.head()?.target().ok_or("HEAD has no target")?;
     let mut revwalk = repo.revwalk()?;
     revwalk.push_head()?;
     revwalk.set_sorting(git2::Sort::REVERSE)?;
+
+    if let Some(oid) = since {
+        if repo.find_commit(oid).is_ok() {
+            revwalk.hide(oid)?;
+        } else {
+            eprintln!(
+                "warning: stored commit {} not found in history, falling back to full scan",
+                oid
+            );
+        }
+    }
 
     let mut lines = Vec::new();
 
@@ -58,7 +73,7 @@ pub fn walk_diffs(repo_path: &Path) -> Result<Vec<DiffLine>, Box<dyn std::error:
         )?;
     }
 
-    Ok(lines)
+    Ok((lines, head_oid))
 }
 
 #[cfg(test)]
@@ -103,7 +118,7 @@ mod tests {
     #[test]
     fn walks_all_commits_and_yields_added_lines() {
         let dir = create_test_repo();
-        let lines: Vec<DiffLine> = walk_diffs(dir.path()).unwrap();
+        let (lines, _) = walk_diffs(dir.path(), None).unwrap();
 
         assert!(!lines.is_empty());
         assert!(lines.iter().any(|l| l.content.contains("AKIAIOSFODNN7EXAMPLE")));
@@ -113,11 +128,57 @@ mod tests {
     #[test]
     fn includes_commit_metadata() {
         let dir = create_test_repo();
-        let lines: Vec<DiffLine> = walk_diffs(dir.path()).unwrap();
+        let (lines, _) = walk_diffs(dir.path(), None).unwrap();
 
         for line in &lines {
             assert!(!line.commit_sha.is_empty());
             assert!(line.line_number > 0);
         }
+    }
+
+    #[test]
+    fn incremental_scan_skips_old_commits() {
+        let dir = TempDir::new().unwrap();
+        let path = dir.path();
+
+        run_git(path, &["init"]);
+        run_git(path, &["config", "user.email", "test@test.com"]);
+        run_git(path, &["config", "user.name", "Test"]);
+
+        std::fs::write(path.join("old.txt"), "old content\n").unwrap();
+        run_git(path, &["add", "."]);
+        run_git(path, &["commit", "-m", "old commit"]);
+
+        let repo = git2::Repository::open(path).unwrap();
+        let old_head = repo.head().unwrap().target().unwrap();
+
+        std::fs::write(path.join("new.txt"), "new content\n").unwrap();
+        run_git(path, &["add", "."]);
+        run_git(path, &["commit", "-m", "new commit"]);
+
+        let (lines, head_oid) = walk_diffs(path, Some(old_head)).unwrap();
+
+        assert!(lines.iter().any(|l| l.file_path == "new.txt"));
+        assert!(!lines.iter().any(|l| l.file_path == "old.txt"));
+        assert_ne!(head_oid, old_head);
+    }
+
+    #[test]
+    fn full_scan_returns_head_oid() {
+        let dir = create_test_repo();
+        let (lines, head_oid) = walk_diffs(dir.path(), None).unwrap();
+        assert!(!lines.is_empty());
+
+        let repo = git2::Repository::open(dir.path()).unwrap();
+        let expected_head = repo.head().unwrap().target().unwrap();
+        assert_eq!(head_oid, expected_head);
+    }
+
+    #[test]
+    fn invalid_since_oid_falls_back_to_full() {
+        let dir = create_test_repo();
+        let fake_oid = git2::Oid::from_str("0000000000000000000000000000000000000000").unwrap();
+        let (lines, _) = walk_diffs(dir.path(), Some(fake_oid)).unwrap();
+        assert!(lines.iter().any(|l| l.content.contains("AKIAIOSFODNN7EXAMPLE")));
     }
 }
