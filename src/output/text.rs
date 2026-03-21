@@ -71,7 +71,7 @@ pub fn render(result: &ScanResult) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::models::{Confidence, Finding, ScanResult};
+    use crate::models::{Confidence, Finding, ScanMode, ScanResult};
 
     #[test]
     fn formats_finding_with_all_fields() {
@@ -97,6 +97,7 @@ mod tests {
             findings: vec![],
             commits_scanned: 42,
             files_scanned: 100,
+            mode: ScanMode::Full,
         };
         let output = format_summary(&result);
         assert!(output.contains("42"));

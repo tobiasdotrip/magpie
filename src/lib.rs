@@ -21,5 +21,6 @@ pub fn run_scan(repo_path: &Path) -> Result<models::ScanResult, Box<dyn std::err
         findings,
         commits_scanned,
         files_scanned,
+        mode: models::ScanMode::Full,
     })
 }

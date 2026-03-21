@@ -27,10 +27,18 @@ pub enum Confidence {
     High,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum ScanMode {
+    Full,
+    Incremental,
+}
+
 pub struct ScanResult {
     pub findings: Vec<Finding>,
     pub commits_scanned: usize,
     pub files_scanned: usize,
+    pub mode: ScanMode,
 }
 
 #[cfg(test)]
@@ -50,6 +58,18 @@ mod tests {
         };
         assert_eq!(finding.confidence, Confidence::High);
         assert_eq!(finding.rule_id, "aws-access-key");
+    }
+
+    #[test]
+    fn scan_mode_serializes() {
+        assert_eq!(
+            serde_json::to_string(&ScanMode::Incremental).unwrap(),
+            "\"incremental\""
+        );
+        assert_eq!(
+            serde_json::to_string(&ScanMode::Full).unwrap(),
+            "\"full\""
+        );
     }
 
     #[test]

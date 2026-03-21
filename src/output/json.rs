@@ -20,7 +20,7 @@ pub fn render(result: &ScanResult) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::models::{Confidence, Finding, ScanResult};
+    use crate::models::{Confidence, Finding, ScanMode, ScanResult};
 
     #[test]
     fn produces_valid_json() {
@@ -36,6 +36,7 @@ mod tests {
             }],
             commits_scanned: 1,
             files_scanned: 1,
+            mode: ScanMode::Full,
         };
         let json = render(&result);
         let parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
@@ -57,6 +58,7 @@ mod tests {
             }],
             commits_scanned: 1,
             files_scanned: 1,
+            mode: ScanMode::Full,
         };
         let json = render(&result);
         assert!(json.contains("AKIAIOSFODNN7EXAMPLE"));
