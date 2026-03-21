@@ -19,6 +19,10 @@ pub enum Commands {
         /// Output format
         #[arg(long, default_value = "text")]
         format: OutputFormat,
+
+        /// Force a full scan (ignore .magpie-state)
+        #[arg(long)]
+        full: bool,
     },
 }
 

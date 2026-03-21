@@ -7,12 +7,12 @@ fn main() {
     let args = cli::Cli::parse();
 
     match args.command {
-        cli::Commands::Scan { path, format } => {
-            let result = match magpie::run_scan(&path) {
+        cli::Commands::Scan { path, format, full } => {
+            let (result, head_oid) = match magpie::run_scan(&path, full) {
                 Ok(r) => r,
                 Err(e) => {
                     eprintln!("Error: {e}");
-                    process::exit(1);
+                    process::exit(2);
                 }
             };
 
@@ -21,6 +21,10 @@ fn main() {
                 cli::OutputFormat::Json => magpie::output::json::render(&result),
             };
             print!("{output}");
+
+            if let Err(e) = magpie::state::write(&path, head_oid) {
+                eprintln!("warning: could not write .magpie-state: {e}");
+            }
 
             let has_high = result.findings.iter().any(|f| {
                 f.confidence == magpie::models::Confidence::High
