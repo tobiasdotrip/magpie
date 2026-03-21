@@ -97,6 +97,72 @@ pub fn persist(
     Ok(())
 }
 
+pub fn dashboard(repo_root: &Path) -> Result<String, Box<dyn std::error::Error>> {
+    if !db_exists(repo_root) {
+        return Ok("No scans recorded yet. Run magpie scan to start tracking.\n".to_string());
+    }
+    let conn = Connection::open(repo_root.join(DB_FILE))?;
+
+    let scan_count: i64 = conn.query_row("SELECT count(*) FROM scans", [], |r| r.get(0))?;
+
+    if scan_count == 0 {
+        return Ok("No scans recorded yet. Run magpie scan to start tracking.\n".to_string());
+    }
+
+    // Last scan info
+    let (last_scan_id, mode, commits, files, _fcount, created_at): (i64, String, i64, i64, i64, String) = conn.query_row(
+        "SELECT id, mode, commits_scanned, files_scanned, findings_count, created_at FROM scans ORDER BY id DESC LIMIT 1",
+        [],
+        |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?, r.get(5)?)),
+    )?;
+
+    // Last scan breakdown
+    let last_high: i64 = conn.query_row("SELECT count(*) FROM findings WHERE scan_id = ?1 AND confidence = 'high'", [last_scan_id], |r| r.get(0))?;
+    let last_medium: i64 = conn.query_row("SELECT count(*) FROM findings WHERE scan_id = ?1 AND confidence = 'medium'", [last_scan_id], |r| r.get(0))?;
+    let last_low: i64 = conn.query_row("SELECT count(*) FROM findings WHERE scan_id = ?1 AND confidence = 'low'", [last_scan_id], |r| r.get(0))?;
+    let last_total = last_high + last_medium + last_low;
+
+    // Global stats
+    let total_findings: i64 = conn.query_row("SELECT count(*) FROM findings", [], |r| r.get(0))?;
+    let global_high: i64 = conn.query_row("SELECT count(*) FROM findings WHERE confidence = 'high'", [], |r| r.get(0))?;
+    let global_medium: i64 = conn.query_row("SELECT count(*) FROM findings WHERE confidence = 'medium'", [], |r| r.get(0))?;
+    let global_low: i64 = conn.query_row("SELECT count(*) FROM findings WHERE confidence = 'low'", [], |r| r.get(0))?;
+
+    // Top rules (global)
+    let mut stmt = conn.prepare(
+        "SELECT rule_id, count(*) as c FROM findings GROUP BY rule_id ORDER BY c DESC LIMIT 5"
+    )?;
+    let top_rules: Vec<(String, i64)> = stmt.query_map([], |r| {
+        Ok((r.get(0)?, r.get(1)?))
+    })?.filter_map(|r| r.ok()).collect();
+
+    let top_rules_str = top_rules
+        .iter()
+        .map(|(rule, count)| format!("{rule} ({count})"))
+        .collect::<Vec<_>>()
+        .join(", ");
+
+    let mut out = String::new();
+    out.push_str(&format!("Last scan: {created_at} ({mode}, {commits} commits, {files} files)\n"));
+    out.push_str(&format!("  {last_total} findings: {last_high} high, {last_medium} medium, {last_low} low\n"));
+    out.push_str(&format!("\nHistory: {scan_count} scans, {total_findings} total findings\n"));
+    out.push_str(&format!("  By confidence: {global_high} high, {global_medium} medium, {global_low} low\n"));
+    if !top_rules_str.is_empty() {
+        out.push_str(&format!("  Top rules: {top_rules_str}\n"));
+    }
+
+    Ok(out)
+}
+
+pub fn reset(repo_root: &Path) -> Result<(), Box<dyn std::error::Error>> {
+    if !db_exists(repo_root) {
+        return Err("No nest database found.".into());
+    }
+    let conn = Connection::open(repo_root.join(DB_FILE))?;
+    conn.execute_batch("DELETE FROM findings; DELETE FROM scans;")?;
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -196,5 +262,79 @@ mod tests {
         let dir = TempDir::new().unwrap();
         let result = make_result(ScanMode::Full, vec![]);
         persist(dir.path(), &result, Some("abc1234")).unwrap();
+    }
+
+    #[test]
+    fn dashboard_no_scans() {
+        let dir = TempDir::new().unwrap();
+        init_db(dir.path()).unwrap();
+        let output = dashboard(dir.path()).unwrap();
+        assert!(output.contains("No scans recorded yet"));
+    }
+
+    #[test]
+    fn dashboard_with_scans() {
+        let dir = TempDir::new().unwrap();
+        init_db(dir.path()).unwrap();
+
+        let result = make_result(
+            ScanMode::Full,
+            vec![
+                make_finding("aws-access-key-id", Confidence::High),
+                make_finding("aws-access-key-id", Confidence::High),
+                make_finding("generic-secret", Confidence::Medium),
+            ],
+        );
+        persist(dir.path(), &result, Some("abc1234")).unwrap();
+
+        let output = dashboard(dir.path()).unwrap();
+        assert!(output.contains("Last scan:"));
+        assert!(output.contains("full"));
+        // Last scan breakdown
+        assert!(output.contains("3 findings: 2 high, 1 medium, 0 low"));
+        // Global stats
+        assert!(output.contains("aws-access-key-id"));
+    }
+
+    #[test]
+    fn dashboard_without_db_shows_no_scans() {
+        let dir = TempDir::new().unwrap();
+        // No init_db
+        let output = dashboard(dir.path()).unwrap();
+        assert!(output.contains("No scans recorded yet"));
+    }
+
+    #[test]
+    fn reset_clears_all_data() {
+        let dir = TempDir::new().unwrap();
+        init_db(dir.path()).unwrap();
+
+        let result = make_result(ScanMode::Full, vec![make_finding("test", Confidence::High)]);
+        persist(dir.path(), &result, Some("abc")).unwrap();
+
+        reset(dir.path()).unwrap();
+
+        let output = dashboard(dir.path()).unwrap();
+        assert!(output.contains("No scans recorded yet"));
+    }
+
+    #[test]
+    fn dashboard_does_not_expose_raw_secrets() {
+        let dir = TempDir::new().unwrap();
+        init_db(dir.path()).unwrap();
+
+        let mut finding = make_finding("test", Confidence::High);
+        finding.matched_text = "AKIAIOSFODNN7EXAMPLE".to_string();
+        let result = make_result(ScanMode::Full, vec![finding]);
+        persist(dir.path(), &result, Some("abc")).unwrap();
+
+        let output = dashboard(dir.path()).unwrap();
+        assert!(!output.contains("AKIAIOSFODNN7EXAMPLE"));
+    }
+
+    #[test]
+    fn reset_without_db_returns_error() {
+        let dir = TempDir::new().unwrap();
+        assert!(reset(dir.path()).is_err());
     }
 }
