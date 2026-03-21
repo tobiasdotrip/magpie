@@ -2,7 +2,7 @@
 
 > Fast, zero-config git secret scanner. Single binary, built-in rules, confidence scoring.
 
-![version](https://img.shields.io/badge/version-0.4.0-blue)
+![version](https://img.shields.io/badge/version-0.5.0-blue)
 ![rust](https://img.shields.io/badge/rust-2021-orange)
 
 magpie scans git history for exposed secrets — API keys, tokens, private keys, high-entropy strings. It walks diffs commit-by-commit, so you see exactly when a secret was introduced.
@@ -188,6 +188,17 @@ magpie scan --full   # Force a full scan
 
 Add `.magpie-state` to your `.gitignore` — it's local state, not meant to be shared.
 
+## List rules (`magpie shiny`)
+
+See what patterns magpie detects — the magpie is attracted to shiny things.
+
+```bash
+magpie shiny             # List active rules
+magpie shiny --format json
+```
+
+Custom rules from `.magpie.toml` are tagged `[custom]`. Disabled rules are excluded.
+
 ## How it works
 
 1. Opens the git repo via libgit2
@@ -197,6 +208,3 @@ Add `.magpie-state` to your `.gitignore` — it's local state, not meant to be s
 5. Scores confidence using: pattern specificity, file path, Shannon entropy
 6. Outputs findings sorted by confidence
 
-## Roadmap
-
-- `magpie shiny` — list detectable patterns
