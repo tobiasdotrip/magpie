@@ -2,7 +2,7 @@
 
 > Fast, zero-config git secret scanner. Single binary, built-in rules, confidence scoring.
 
-![version](https://img.shields.io/badge/version-0.3.0-blue)
+![version](https://img.shields.io/badge/version-0.4.0-blue)
 ![rust](https://img.shields.io/badge/rust-2021-orange)
 
 magpie scans git history for exposed secrets — API keys, tokens, private keys, high-entropy strings. It walks diffs commit-by-commit, so you see exactly when a secret was introduced.
@@ -154,6 +154,29 @@ keywords = ["INTERNAL_"]
 
 Custom rules use the same format as built-in rules. They apply to both `scan` and `watch`.
 
+## Findings dashboard (`magpie nest`)
+
+Track scan history in a local SQLite database.
+
+```bash
+magpie nest              # Show dashboard (creates DB on first run)
+magpie nest show         # Same as above, explicit
+magpie nest reset        # Clear all stored data
+```
+
+Once the database exists, `scan` and `watch` automatically persist results. The database (`.magpie.db`) is local — add it to your `.gitignore`.
+
+Example output:
+
+```
+Last scan: 2026-03-21T14:30:00 (incremental, 3 commits, 8 files)
+  2 findings: 1 high, 1 medium, 0 low
+
+History: 12 scans, 47 total findings
+  By confidence: 15 high, 18 medium, 14 low
+  Top rules: aws-access-key-id (12), generic-secret (8), jwt (5)
+```
+
 ## Incremental scan
 
 After the first scan, magpie stores the last scanned commit in `.magpie-state` and only scans new commits on subsequent runs.
@@ -176,5 +199,4 @@ Add `.magpie-state` to your `.gitignore` — it's local state, not meant to be s
 
 ## Roadmap
 
-- **v0.4.0** — `magpie nest` (local findings dashboard via SQLite)
 - `magpie shiny` — list detectable patterns
