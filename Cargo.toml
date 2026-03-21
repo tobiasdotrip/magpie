@@ -1,0 +1,17 @@
+[package]
+name = "magpie"
+version = "0.1.0"
+edition = "2021"
+description = "Fast git secret scanner"
+
+[dependencies]
+clap = { version = "4", features = ["derive"] }
+git2 = "0.19"
+regex = "1"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+toml = "0.8"
+owo-colors = "4"
+
+[dev-dependencies]
+tempfile = "3"
