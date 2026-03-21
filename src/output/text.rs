@@ -1,4 +1,4 @@
-use crate::models::{Confidence, Finding, ScanResult};
+use crate::models::{Confidence, Finding, ScanMode, ScanResult};
 use owo_colors::OwoColorize;
 
 pub fn redact(s: &str) -> String {
@@ -44,11 +44,15 @@ pub fn format_summary(result: &ScanResult) -> String {
         .count();
 
     format!(
-        "\n{icon} Scan complete: {commits} commits, {files} files scanned\n  {count} findings: {high} high, {medium} medium, {low} low\n",
+        "\n{icon} Scan complete ({mode}): {commits} commits, {files} files scanned\n  {count} findings: {high} high, {medium} medium, {low} low\n",
         icon = if high > 0 {
             "!".red().bold().to_string()
         } else {
             "OK".green().bold().to_string()
+        },
+        mode = match result.mode {
+            ScanMode::Full => "full",
+            ScanMode::Incremental => "incremental",
         },
         commits = result.commits_scanned,
         files = result.files_scanned,
@@ -109,5 +113,26 @@ mod tests {
         assert_eq!(redact("AKIAIOSFODNN7EXAMPLE"), "AKIA****");
         assert_eq!(redact("short"), "shor****");
         assert_eq!(redact("ab"), "ab****");
+    }
+
+    #[test]
+    fn summary_shows_scan_mode() {
+        let result = ScanResult {
+            findings: vec![],
+            commits_scanned: 10,
+            files_scanned: 5,
+            mode: ScanMode::Incremental,
+        };
+        let output = format_summary(&result);
+        assert!(output.contains("(incremental)"));
+
+        let result_full = ScanResult {
+            findings: vec![],
+            commits_scanned: 100,
+            files_scanned: 50,
+            mode: ScanMode::Full,
+        };
+        let output_full = format_summary(&result_full);
+        assert!(output_full.contains("(full)"));
     }
 }

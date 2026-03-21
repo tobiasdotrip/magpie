@@ -6,6 +6,7 @@ struct JsonOutput<'a> {
     findings: &'a [crate::models::Finding],
     commits_scanned: usize,
     files_scanned: usize,
+    mode: crate::models::ScanMode,
 }
 
 pub fn render(result: &ScanResult) -> String {
@@ -13,6 +14,7 @@ pub fn render(result: &ScanResult) -> String {
         findings: &result.findings,
         commits_scanned: result.commits_scanned,
         files_scanned: result.files_scanned,
+        mode: result.mode,
     };
     serde_json::to_string_pretty(&output).expect("ScanResult is always serializable")
 }
@@ -62,5 +64,18 @@ mod tests {
         };
         let json = render(&result);
         assert!(json.contains("AKIAIOSFODNN7EXAMPLE"));
+    }
+
+    #[test]
+    fn json_includes_mode() {
+        let result = ScanResult {
+            findings: vec![],
+            commits_scanned: 1,
+            files_scanned: 1,
+            mode: ScanMode::Incremental,
+        };
+        let json = render(&result);
+        let parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed["mode"], "incremental");
     }
 }
