@@ -290,16 +290,13 @@ mod tests {
         let output = dashboard(dir.path()).unwrap();
         assert!(output.contains("Last scan:"));
         assert!(output.contains("full"));
-        // Last scan breakdown
         assert!(output.contains("3 findings: 2 high, 1 medium, 0 low"));
-        // Global stats
         assert!(output.contains("aws-access-key-id"));
     }
 
     #[test]
     fn dashboard_without_db_shows_no_scans() {
         let dir = TempDir::new().unwrap();
-        // No init_db
         let output = dashboard(dir.path()).unwrap();
         assert!(output.contains("No scans recorded yet"));
     }
