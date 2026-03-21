@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="assets/logo.jpg" alt="magpie" width="300">
+</p>
+
 # magpie
 
 > Fast, zero-config git secret scanner. Single binary, built-in rules, confidence scoring.
