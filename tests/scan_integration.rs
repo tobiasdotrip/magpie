@@ -351,3 +351,89 @@ disable_rules = ["aws-access-key-id"]
         .unwrap();
     assert!(output.status.success(), "Disabled rule should not produce findings");
 }
+
+#[test]
+fn nest_creates_db_and_shows_empty_dashboard() {
+    let dir = create_clean_repo();
+    let bin = env!("CARGO_BIN_EXE_magpie");
+
+    let output = Command::new(bin)
+        .args(["nest", "show", dir.path().to_str().unwrap()])
+        .output()
+        .unwrap();
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(output.status.success());
+    assert!(stdout.contains("No scans recorded yet"));
+    assert!(dir.path().join(".magpie.db").exists());
+}
+
+#[test]
+fn scan_persists_to_nest_db() {
+    let dir = create_repo_with_secret();
+    let bin = env!("CARGO_BIN_EXE_magpie");
+
+    // Create DB first
+    Command::new(bin)
+        .args(["nest", "show", dir.path().to_str().unwrap()])
+        .output()
+        .unwrap();
+
+    // Run scan
+    Command::new(bin)
+        .args(["scan", "--full", dir.path().to_str().unwrap()])
+        .output()
+        .unwrap();
+
+    // Check dashboard
+    let output = Command::new(bin)
+        .args(["nest", "show", dir.path().to_str().unwrap()])
+        .output()
+        .unwrap();
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("Last scan:"));
+    assert!(stdout.contains("aws-access-key-id"));
+}
+
+#[test]
+fn nest_reset_clears_data() {
+    let dir = create_repo_with_secret();
+    let bin = env!("CARGO_BIN_EXE_magpie");
+
+    // Create DB and run scan
+    Command::new(bin)
+        .args(["nest", "show", dir.path().to_str().unwrap()])
+        .output()
+        .unwrap();
+    Command::new(bin)
+        .args(["scan", "--full", dir.path().to_str().unwrap()])
+        .output()
+        .unwrap();
+
+    // Reset
+    let output = Command::new(bin)
+        .args(["nest", "reset", dir.path().to_str().unwrap()])
+        .output()
+        .unwrap();
+    assert!(output.status.success());
+
+    // Dashboard should be empty
+    let output = Command::new(bin)
+        .args(["nest", "show", dir.path().to_str().unwrap()])
+        .output()
+        .unwrap();
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("No scans recorded yet"));
+}
+
+#[test]
+fn scan_without_nest_db_does_not_create_it() {
+    let dir = create_clean_repo();
+    let bin = env!("CARGO_BIN_EXE_magpie");
+
+    Command::new(bin)
+        .args(["scan", "--full", dir.path().to_str().unwrap()])
+        .output()
+        .unwrap();
+
+    assert!(!dir.path().join(".magpie.db").exists());
+}
