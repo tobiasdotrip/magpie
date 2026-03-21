@@ -52,11 +52,6 @@ fn main() {
 
             if result.findings.is_empty() && result.files_scanned == 0 {
                 println!("nothing staged");
-                if let Some(ref root) = root {
-                    if let Err(e) = magpie::nest::persist(root, &result, None) {
-                        eprintln!("warning: could not write to nest database: {e}");
-                    }
-                }
                 return;
             }
 
