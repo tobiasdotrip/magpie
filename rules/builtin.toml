@@ -1,3 +1,8 @@
+# String convention:
+# - Literal strings ('...') for patterns without quotes/escapes — regex is verbatim
+# - Basic strings ("...") when the pattern contains quotes or backslash sequences
+#   In basic strings: \\s → regex \s, \\- → regex \-, [\"'] → regex ["']
+
 [[rules]]
 id = "aws-access-key-id"
 description = "AWS Access Key ID"

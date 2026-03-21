@@ -75,6 +75,7 @@ mod tests {
     #[test]
     fn uses_capture_group_for_scoring() {
         let rules = load_builtin_rules().unwrap();
+        // 20 unique chars → entropy = log2(20) ≈ 4.32, above ENTROPY_THRESHOLD (4.0)
         let line = make_line("password = \"aB3kL9mZ2pQ7xY5nW8jR\"", "config.yml");
         let matches = scan_line(&line, &rules);
         assert!(!matches.is_empty());
