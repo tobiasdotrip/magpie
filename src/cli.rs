@@ -35,6 +35,28 @@ pub enum Commands {
         #[arg(long, default_value = "text")]
         format: OutputFormat,
     },
+
+    /// Local findings dashboard
+    Nest {
+        #[command(subcommand)]
+        action: Option<NestAction>,
+    },
+}
+
+#[derive(clap::Subcommand, Debug)]
+pub enum NestAction {
+    /// Clear all stored scan data
+    Reset {
+        /// Path to the git repository (defaults to current directory)
+        #[arg(default_value = ".")]
+        path: PathBuf,
+    },
+    /// Show dashboard
+    Show {
+        /// Path to the git repository (defaults to current directory)
+        #[arg(default_value = ".")]
+        path: PathBuf,
+    },
 }
 
 #[derive(Debug, Clone, ValueEnum)]

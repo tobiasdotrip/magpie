@@ -14,7 +14,7 @@ use git2::{Oid, Repository};
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 
-fn resolve_root(repo_path: &Path) -> Result<PathBuf, Box<dyn std::error::Error>> {
+pub fn resolve_root(repo_path: &Path) -> Result<PathBuf, Box<dyn std::error::Error>> {
     let repo = Repository::open(repo_path)?;
     repo.workdir()
         .map(|p| p.to_path_buf())
