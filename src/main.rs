@@ -33,5 +33,33 @@ fn main() {
                 process::exit(1);
             }
         }
+
+        cli::Commands::Watch { path, format } => {
+            let result = match magpie::run_watch(&path) {
+                Ok(r) => r,
+                Err(e) => {
+                    eprintln!("Error: {e}");
+                    process::exit(2);
+                }
+            };
+
+            if result.findings.is_empty() && result.files_scanned == 0 {
+                println!("nothing staged");
+                return;
+            }
+
+            let output = match format {
+                cli::OutputFormat::Text => magpie::output::text::render(&result),
+                cli::OutputFormat::Json => magpie::output::json::render(&result),
+            };
+            print!("{output}");
+
+            let has_high = result.findings.iter().any(|f| {
+                f.confidence == magpie::models::Confidence::High
+            });
+            if has_high {
+                process::exit(1);
+            }
+        }
     }
 }

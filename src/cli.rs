@@ -24,6 +24,17 @@ pub enum Commands {
         #[arg(long)]
         full: bool,
     },
+
+    /// Scan staged changes for secrets (pre-commit hook)
+    Watch {
+        /// Path to the git repository (defaults to current directory)
+        #[arg(default_value = ".")]
+        path: PathBuf,
+
+        /// Output format
+        #[arg(long, default_value = "text")]
+        format: OutputFormat,
+    },
 }
 
 #[derive(Debug, Clone, ValueEnum)]

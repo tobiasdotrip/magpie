@@ -20,6 +20,24 @@ fn resolve_root(repo_path: &Path) -> Result<PathBuf, Box<dyn std::error::Error>>
         .ok_or_else(|| "bare repository not supported".into())
 }
 
+pub fn run_watch(repo_path: &Path) -> Result<models::ScanResult, Box<dyn std::error::Error>> {
+    let root = resolve_root(repo_path)?;
+    let rules = rules::load_rules(&root)?;
+    let lines = watch::scan_staged(&root)?;
+
+    let files_scanned = lines.iter().map(|l| &l.file_path).collect::<HashSet<_>>().len();
+    let findings = engine::scan_all(&lines, &rules);
+    let al = allowlist::load(&root);
+    let findings = al.filter(findings);
+
+    Ok(models::ScanResult {
+        findings,
+        commits_scanned: 0,
+        files_scanned,
+        mode: models::ScanMode::Watch,
+    })
+}
+
 pub fn run_scan(
     repo_path: &Path,
     force_full: bool,
