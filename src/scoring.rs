@@ -19,22 +19,18 @@ const ENTROPY_THRESHOLD: f64 = 4.0;
 pub fn score_finding(rule: &RuleDefinition, matched_text: &str, file_path: &str) -> Confidence {
     let file_lower = file_path.to_lowercase();
 
-    // Test/example files -> always Low
     if TEST_INDICATORS.iter().any(|t| file_lower.contains(t)) {
         return Confidence::Low;
     }
 
-    // High-specificity patterns (AKIA, ghp_, PEM headers) -> High
     if HIGH_CONFIDENCE_RULES.contains(&rule.id.as_str()) {
         return Confidence::High;
     }
 
-    // Sensitive file extensions boost
     let in_sensitive_file = SENSITIVE_EXTENSIONS
         .iter()
         .any(|ext| file_lower.ends_with(ext));
 
-    // Entropy check for generic patterns
     let entropy = shannon_entropy(matched_text);
     let high_entropy = entropy > ENTROPY_THRESHOLD;
 
@@ -93,7 +89,6 @@ mod tests {
 
     #[test]
     fn generic_pattern_high_entropy_is_medium() {
-        // This value has entropy ~4.2 -- above 4.0 threshold
         let c = score_finding(
             &rule("generic-secret"),
             "aB3$kL9!mZ2@pQ7&xY5#",

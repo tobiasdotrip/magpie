@@ -8,9 +8,6 @@ pub fn scan_line(line: &DiffLine, rules: &[CompiledRule]) -> Vec<Finding> {
     for rule in rules {
         if let Some(caps) = rule.regex.captures(&line.content) {
             let full_match = caps.get(0).unwrap().as_str();
-            // Use first capture group if it exists, otherwise full match.
-            // Capture groups isolate the secret value from context (e.g. "password=" prefix),
-            // giving more accurate entropy scoring.
             let scoring_text = caps.get(1).map(|m| m.as_str()).unwrap_or(full_match);
 
             let finding = Finding {
@@ -77,15 +74,10 @@ mod tests {
 
     #[test]
     fn uses_capture_group_for_scoring() {
-        // "generic-secret" pattern has a capture group for the value part.
-        // The engine should pass the captured value (not the full match) to scoring.
         let rules = load_builtin_rules().unwrap();
         let line = make_line("password = \"aB3kL9mZ2pQ7xY5nW8jR\"", "config.yml");
         let matches = scan_line(&line, &rules);
         assert!(!matches.is_empty());
-        // The matched_text stored in Finding is the full match (for display),
-        // but scoring received only the captured value (high entropy).
-        // With entropy > 4.0 on the value, this should be Medium, not Low.
         assert_eq!(matches[0].confidence, crate::models::Confidence::Medium);
     }
 }
