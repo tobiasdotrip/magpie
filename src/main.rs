@@ -8,7 +8,7 @@ fn main() {
 
     match args.command {
         cli::Commands::Scan { path, format, full } => {
-            let (result, head_oid) = match magpie::run_scan(&path, full) {
+            let (result, head_oid, root) = match magpie::run_scan(&path, full) {
                 Ok(r) => r,
                 Err(e) => {
                     eprintln!("Error: {e}");
@@ -22,7 +22,7 @@ fn main() {
             };
             print!("{output}");
 
-            if let Err(e) = magpie::state::write(&path, head_oid) {
+            if let Err(e) = magpie::state::write(&root, head_oid) {
                 eprintln!("warning: could not write .magpie-state: {e}");
             }
 

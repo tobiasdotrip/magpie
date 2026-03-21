@@ -32,6 +32,7 @@ pub enum Confidence {
 pub enum ScanMode {
     Full,
     Incremental,
+    Watch,
 }
 
 pub struct ScanResult {

@@ -8,18 +8,27 @@ pub mod scanner;
 pub mod scoring;
 pub mod state;
 
-use git2::Oid;
+use git2::{Oid, Repository};
 use std::collections::HashSet;
-use std::path::Path;
+use std::path::{Path, PathBuf};
+
+fn resolve_root(repo_path: &Path) -> Result<PathBuf, Box<dyn std::error::Error>> {
+    let repo = Repository::open(repo_path)?;
+    repo.workdir()
+        .map(|p| p.to_path_buf())
+        .ok_or_else(|| "bare repository not supported".into())
+}
 
 pub fn run_scan(
     repo_path: &Path,
     force_full: bool,
-) -> Result<(models::ScanResult, Oid), Box<dyn std::error::Error>> {
+) -> Result<(models::ScanResult, Oid, PathBuf), Box<dyn std::error::Error>> {
+    let root = resolve_root(repo_path)?;
+
     let since = if force_full {
         None
     } else {
-        state::read(repo_path)
+        state::read(&root)
     };
 
     let mode = if since.is_some() {
@@ -29,13 +38,13 @@ pub fn run_scan(
     };
 
     let rules = rules::load_builtin_rules()?;
-    let (lines, head_oid) = scanner::walk_diffs(repo_path, since)?;
+    let (lines, head_oid) = scanner::walk_diffs(&root, since)?;
 
     let commits_scanned = lines.iter().map(|l| &l.commit_sha).collect::<HashSet<_>>().len();
     let files_scanned = lines.iter().map(|l| &l.file_path).collect::<HashSet<_>>().len();
 
     let findings = engine::scan_all(&lines, &rules);
-    let al = allowlist::load(repo_path);
+    let al = allowlist::load(&root);
     let findings = al.filter(findings);
 
     Ok((
@@ -46,5 +55,6 @@ pub fn run_scan(
             mode,
         },
         head_oid,
+        root,
     ))
 }

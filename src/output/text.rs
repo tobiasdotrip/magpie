@@ -53,6 +53,7 @@ pub fn format_summary(result: &ScanResult) -> String {
         mode = match result.mode {
             ScanMode::Full => "full",
             ScanMode::Incremental => "incremental",
+            ScanMode::Watch => "watch",
         },
         commits = result.commits_scanned,
         files = result.files_scanned,
