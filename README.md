@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="assets/logo.jpg" alt="magpie" width="300">
+  <img src="assets/logo.jpg" alt="magpie" width="500">
 </p>
 
 # magpie
