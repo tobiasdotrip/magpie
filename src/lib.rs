@@ -7,6 +7,7 @@ pub mod rules;
 pub mod scanner;
 pub mod scoring;
 pub mod state;
+pub mod watch;
 
 use git2::{Oid, Repository};
 use std::collections::HashSet;
