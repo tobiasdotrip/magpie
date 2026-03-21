@@ -437,3 +437,59 @@ fn scan_without_nest_db_does_not_create_it() {
 
     assert!(!dir.path().join(".magpie.db").exists());
 }
+
+#[test]
+fn shiny_lists_builtin_rules() {
+    let dir = create_clean_repo();
+    let bin = env!("CARGO_BIN_EXE_magpie");
+
+    let output = Command::new(bin)
+        .args(["shiny", dir.path().to_str().unwrap()])
+        .output()
+        .unwrap();
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(output.status.success());
+    assert!(stdout.contains("aws-access-key-id"));
+    assert!(stdout.contains("8 rules active"));
+}
+
+#[test]
+fn shiny_shows_custom_rules() {
+    let dir = create_clean_repo();
+    let bin = env!("CARGO_BIN_EXE_magpie");
+
+    std::fs::write(
+        dir.path().join(".magpie.toml"),
+        r#"
+[[rules]]
+id = "my-custom-rule"
+description = "My Custom"
+pattern = 'CUSTOM_[A-Z]{10}'
+"#,
+    )
+    .unwrap();
+
+    let output = Command::new(bin)
+        .args(["shiny", dir.path().to_str().unwrap()])
+        .output()
+        .unwrap();
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("my-custom-rule"));
+    assert!(stdout.contains("[custom]"));
+    assert!(stdout.contains("9 rules active (8 built-in, 1 custom)"));
+}
+
+#[test]
+fn shiny_json_output() {
+    let dir = create_clean_repo();
+    let bin = env!("CARGO_BIN_EXE_magpie");
+
+    let output = Command::new(bin)
+        .args(["shiny", dir.path().to_str().unwrap(), "--format", "json"])
+        .output()
+        .unwrap();
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let parsed: serde_json::Value = serde_json::from_str(&stdout).unwrap();
+    assert_eq!(parsed["total"], 8);
+    assert!(!parsed["rules"].as_array().unwrap().is_empty());
+}

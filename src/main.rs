@@ -75,6 +75,22 @@ fn main() {
             }
         }
 
+        cli::Commands::Shiny { path, format } => {
+            let (rules, builtin_ids) = match magpie::run_shiny(&path) {
+                Ok(r) => r,
+                Err(e) => {
+                    eprintln!("Error: {e}");
+                    process::exit(2);
+                }
+            };
+
+            let output = match format {
+                cli::OutputFormat::Text => magpie::shiny::render_text(&rules, &builtin_ids),
+                cli::OutputFormat::Json => magpie::shiny::render_json(&rules, &builtin_ids),
+            };
+            print!("{output}");
+        }
+
         cli::Commands::Nest { action } => {
             let path = match &action {
                 Some(cli::NestAction::Reset { path }) => path.clone(),

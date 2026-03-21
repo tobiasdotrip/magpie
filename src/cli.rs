@@ -36,6 +36,17 @@ pub enum Commands {
         format: OutputFormat,
     },
 
+    /// List detectable patterns (the magpie is attracted to shiny things)
+    Shiny {
+        /// Path to the git repository (defaults to current directory)
+        #[arg(default_value = ".")]
+        path: PathBuf,
+
+        /// Output format
+        #[arg(long, default_value = "text")]
+        format: OutputFormat,
+    },
+
     /// Local findings dashboard
     Nest {
         #[command(subcommand)]

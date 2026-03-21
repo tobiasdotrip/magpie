@@ -8,6 +8,7 @@ pub mod scanner;
 pub mod scoring;
 pub mod state;
 pub mod nest;
+pub mod shiny;
 pub mod watch;
 
 use git2::{Oid, Repository};
@@ -37,6 +38,14 @@ pub fn run_watch(repo_path: &Path) -> Result<models::ScanResult, Box<dyn std::er
         files_scanned,
         mode: models::ScanMode::Watch,
     })
+}
+
+pub fn run_shiny(repo_path: &Path) -> Result<(Vec<rules::CompiledRule>, Vec<String>), Box<dyn std::error::Error>> {
+    let root = resolve_root(repo_path)?;
+    let all_rules = rules::load_rules(&root)?;
+    let builtin_rules = rules::load_builtin_rules()?;
+    let builtin_ids: Vec<String> = builtin_rules.iter().map(|r| r.definition.id.clone()).collect();
+    Ok((all_rules, builtin_ids))
 }
 
 pub fn run_scan(
