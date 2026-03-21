@@ -5,6 +5,7 @@ pub mod output;
 pub mod scanner;
 pub mod scoring;
 pub mod engine;
+pub mod state;
 
 use std::collections::HashSet;
 use std::path::Path;
