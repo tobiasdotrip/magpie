@@ -2,8 +2,8 @@ use crate::models::{Confidence, Finding, ScanResult};
 use owo_colors::OwoColorize;
 
 pub fn redact(s: &str) -> String {
-    let visible = std::cmp::min(4, s.len());
-    format!("{}****", &s[..visible])
+    let prefix: String = s.chars().take(4).collect();
+    format!("{prefix}****")
 }
 
 pub fn format_finding(finding: &Finding) -> String {
@@ -14,7 +14,7 @@ pub fn format_finding(finding: &Finding) -> String {
     };
 
     format!(
-        "[{severity}] {rule} -- {desc}\n  File: {file}:{line} (commit {sha})\n  Match: {matched}\n",
+        "[{severity}] {rule} — {desc}\n  File: {file}:{line} (commit {sha})\n  Match: {matched}\n",
         severity = severity_tag,
         rule = finding.rule_id,
         desc = finding.description,
