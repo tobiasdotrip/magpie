@@ -2,7 +2,7 @@
 
 > Fast, zero-config git secret scanner. Single binary, built-in rules, confidence scoring.
 
-![version](https://img.shields.io/badge/version-0.1.0-blue)
+![version](https://img.shields.io/badge/version-0.2.0-blue)
 ![rust](https://img.shields.io/badge/rust-2021-orange)
 
 magpie scans git history for exposed secrets — API keys, tokens, private keys, high-entropy strings. It walks diffs commit-by-commit, so you see exactly when a secret was introduced.
@@ -42,7 +42,7 @@ magpie scan --format json
   File: deploy.yml:12 (commit def5678)
   Match: secr****
 
-✓ Scan complete: 142 commits, 87 files scanned
+✓ Scan complete (full): 142 commits, 87 files scanned
   2 findings: 1 high, 1 medium, 0 low
 ```
 
@@ -73,7 +73,7 @@ Each finding gets a confidence level based on contextual signals:
 
 ## CI usage
 
-magpie exits with code **1** if any **High** confidence finding is detected. Zero otherwise.
+magpie exits with code **1** if any **High** confidence finding is detected.
 
 ```yaml
 # GitHub Actions
@@ -91,6 +91,43 @@ JSON output for programmatic consumption:
 magpie scan --format json | jq '.findings[] | select(.confidence == "High")'
 ```
 
+## Exit codes
+
+| Code | Meaning |
+|------|---------|
+| 0 | Scan completed, no high-confidence findings |
+| 1 | Scan completed, high-confidence findings detected |
+| 2 | Technical error (git2 failure, rule loading error) |
+
+## Allowlist
+
+Create `.magpie-allow` at the repo root to suppress known false positives:
+
+```
+# Ignore all findings in test fixtures
+aws-access-key-id:tests/**
+aws-access-key-id:src/tests/**
+
+# Ignore a specific false positive in a specific commit
+generic-secret:docs/config-example.yml:a1b2c3d
+```
+
+Format: `rule_id:file_glob[:commit_sha]`
+
+- Without commit — finding ignored everywhere
+- With commit (7-char SHA) — ignored only in that commit
+
+## Incremental scan
+
+After the first scan, magpie stores the last scanned commit in `.magpie-state` and only scans new commits on subsequent runs.
+
+```bash
+magpie scan          # First run: full scan. Next runs: incremental.
+magpie scan --full   # Force a full scan
+```
+
+Add `.magpie-state` to your `.gitignore` — it's local state, not meant to be shared.
+
 ## How it works
 
 1. Opens the git repo via libgit2
@@ -102,6 +139,5 @@ magpie scan --format json | jq '.findings[] | select(.confidence == "High")'
 
 ## Roadmap
 
-- **v0.2.0** — Allowlist (`.magpie-allow`) + incremental scan (only new commits)
 - **v0.3.0** — `magpie watch` (pre-commit hook) + custom rules (`.magpie.toml`)
 - **v0.4.0** — `magpie nest` (local findings dashboard via SQLite)
