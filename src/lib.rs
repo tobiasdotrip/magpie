@@ -1,3 +1,4 @@
+pub mod allowlist;
 pub mod models;
 pub mod entropy;
 pub mod rules;
@@ -12,7 +13,7 @@ use std::path::Path;
 
 pub fn run_scan(repo_path: &Path) -> Result<models::ScanResult, Box<dyn std::error::Error>> {
     let rules = rules::load_builtin_rules()?;
-    let lines = scanner::walk_diffs(repo_path)?;
+    let (lines, _head_oid) = scanner::walk_diffs(repo_path, None)?;
 
     let commits_scanned = lines.iter().map(|l| &l.commit_sha).collect::<HashSet<_>>().len();
     let files_scanned = lines.iter().map(|l| &l.file_path).collect::<HashSet<_>>().len();
