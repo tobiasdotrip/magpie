@@ -109,3 +109,119 @@ fn scan_json_output_is_valid() {
         "JSON output should contain full (non-redacted) matched text"
     );
 }
+
+#[test]
+fn incremental_scan_skips_already_scanned_commits() {
+    let dir = create_repo_with_secret();
+    let bin = env!("CARGO_BIN_EXE_magpie");
+
+    // First scan (full) — creates .magpie-state
+    let output = Command::new(bin)
+        .args(["scan", dir.path().to_str().unwrap()])
+        .output()
+        .unwrap();
+    assert!(!output.status.success());
+    assert!(dir.path().join(".magpie-state").exists());
+
+    // Add a clean commit
+    std::fs::write(dir.path().join("clean.txt"), "nothing secret here\n").unwrap();
+    run_git(dir.path(), &["add", "."]);
+    run_git(dir.path(), &["commit", "-m", "add clean file"]);
+
+    // Second scan (incremental) — only new commit, should be clean
+    let output = Command::new(bin)
+        .args(["scan", dir.path().to_str().unwrap()])
+        .output()
+        .unwrap();
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(output.status.success(), "Incremental scan should exit 0 for clean new commits");
+    assert!(stdout.contains("(incremental)"));
+
+    // Verify .magpie-state updated to new HEAD
+    let state_content = std::fs::read_to_string(dir.path().join(".magpie-state")).unwrap();
+    let new_head = Command::new("git")
+        .args(["rev-parse", "HEAD"])
+        .current_dir(dir.path())
+        .output()
+        .unwrap();
+    let expected_sha = String::from_utf8_lossy(&new_head.stdout).trim().to_string();
+    assert!(state_content.contains(&expected_sha));
+}
+
+#[test]
+fn full_flag_forces_full_scan() {
+    let dir = create_repo_with_secret();
+    let bin = env!("CARGO_BIN_EXE_magpie");
+
+    // First scan to create .magpie-state
+    Command::new(bin)
+        .args(["scan", dir.path().to_str().unwrap()])
+        .output()
+        .unwrap();
+
+    // --full should still find the secret
+    let output = Command::new(bin)
+        .args(["scan", "--full", dir.path().to_str().unwrap()])
+        .output()
+        .unwrap();
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(!output.status.success(), "Full scan should still find secrets");
+    assert!(stdout.contains("(full)"));
+}
+
+#[test]
+fn allowlist_suppresses_findings() {
+    let dir = create_repo_with_secret();
+    let bin = env!("CARGO_BIN_EXE_magpie");
+
+    std::fs::write(
+        dir.path().join(".magpie-allow"),
+        "aws-access-key-id:.env\n",
+    ).unwrap();
+
+    let output = Command::new(bin)
+        .args(["scan", "--full", dir.path().to_str().unwrap()])
+        .output()
+        .unwrap();
+
+    assert!(output.status.success(), "Allowlisted finding should not cause exit 1");
+}
+
+#[test]
+fn allowlist_with_commit_pin() {
+    let dir = create_repo_with_secret();
+    let bin = env!("CARGO_BIN_EXE_magpie");
+
+    // Get commit SHA (force full 40-char, then take first 7)
+    let sha_output = Command::new("git")
+        .args(["log", "--format=%H", "-1"])
+        .current_dir(dir.path())
+        .output()
+        .unwrap();
+    let full_sha = String::from_utf8_lossy(&sha_output.stdout).trim().to_string();
+    let sha = &full_sha[..7];
+
+    // Allowlist with correct commit
+    std::fs::write(
+        dir.path().join(".magpie-allow"),
+        format!("aws-access-key-id:.env:{sha}\n"),
+    ).unwrap();
+
+    let output = Command::new(bin)
+        .args(["scan", "--full", dir.path().to_str().unwrap()])
+        .output()
+        .unwrap();
+    assert!(output.status.success(), "Correct commit pin should suppress finding");
+
+    // Allowlist with wrong commit
+    std::fs::write(
+        dir.path().join(".magpie-allow"),
+        "aws-access-key-id:.env:0000000\n",
+    ).unwrap();
+
+    let output = Command::new(bin)
+        .args(["scan", "--full", dir.path().to_str().unwrap()])
+        .output()
+        .unwrap();
+    assert!(!output.status.success(), "Wrong commit pin should not suppress finding");
+}
