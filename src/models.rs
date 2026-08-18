@@ -67,10 +67,7 @@ mod tests {
             serde_json::to_string(&ScanMode::Incremental).unwrap(),
             "\"incremental\""
         );
-        assert_eq!(
-            serde_json::to_string(&ScanMode::Full).unwrap(),
-            "\"full\""
-        );
+        assert_eq!(serde_json::to_string(&ScanMode::Full).unwrap(), "\"full\"");
     }
 
     #[test]

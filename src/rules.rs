@@ -77,6 +77,15 @@ pub fn load_rules(repo_root: &Path) -> Result<Vec<CompiledRule>, Box<dyn std::er
     Ok(rules)
 }
 
+pub fn signature(rules: &[CompiledRule]) -> Result<String, serde_json::Error> {
+    serde_json::to_string(
+        &rules
+            .iter()
+            .map(|rule| &rule.definition)
+            .collect::<Vec<_>>(),
+    )
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -123,7 +132,8 @@ id = "custom-test"
 description = "Custom test rule"
 pattern = 'CUSTOM_[A-Z]{10}'
 "#,
-        ).unwrap();
+        )
+        .unwrap();
         let rules = load_rules(dir.path()).unwrap();
         assert_eq!(rules.len(), 9);
         assert!(rules.iter().any(|r| r.definition.id == "custom-test"));
@@ -138,7 +148,8 @@ pattern = 'CUSTOM_[A-Z]{10}'
 [config]
 disable_rules = ["jwt", "generic-secret"]
 "#,
-        ).unwrap();
+        )
+        .unwrap();
         let rules = load_rules(dir.path()).unwrap();
         assert_eq!(rules.len(), 6);
         assert!(!rules.iter().any(|r| r.definition.id == "jwt"));
@@ -156,7 +167,8 @@ id = "jwt"
 description = "Custom JWT rule"
 pattern = 'MY_JWT_[A-Z]{20}'
 "#,
-        ).unwrap();
+        )
+        .unwrap();
         let rules = load_rules(dir.path()).unwrap();
         let jwt = rules.iter().find(|r| r.definition.id == "jwt").unwrap();
         assert_eq!(jwt.definition.description, "Custom JWT rule");
@@ -177,9 +189,13 @@ id = "generic-secret"
 description = "My custom generic secret"
 pattern = 'MY_SECRET_[A-Z]{10}'
 "#,
-        ).unwrap();
+        )
+        .unwrap();
         let rules = load_rules(dir.path()).unwrap();
-        let gs = rules.iter().find(|r| r.definition.id == "generic-secret").unwrap();
+        let gs = rules
+            .iter()
+            .find(|r| r.definition.id == "generic-secret")
+            .unwrap();
         assert_eq!(gs.definition.description, "My custom generic secret");
     }
 
@@ -201,7 +217,17 @@ id = "bad-regex"
 description = "Bad"
 pattern = '[invalid('
 "#,
-        ).unwrap();
+        )
+        .unwrap();
         assert!(load_rules(dir.path()).is_err());
+    }
+
+    #[test]
+    fn signature_changes_with_effective_rules() {
+        let mut rules = load_builtin_rules().unwrap();
+        let original = signature(&rules).unwrap();
+        rules[0].definition.description.push_str(" updated");
+
+        assert_ne!(signature(&rules).unwrap(), original);
     }
 }

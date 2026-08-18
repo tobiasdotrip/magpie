@@ -20,6 +20,10 @@ pub enum Commands {
         #[arg(long, default_value = "text")]
         format: OutputFormat,
 
+        /// Include raw secret values in JSON output
+        #[arg(long)]
+        show_secrets: bool,
+
         /// Force a full scan (ignore .magpie-state)
         #[arg(long)]
         full: bool,
@@ -34,6 +38,10 @@ pub enum Commands {
         /// Output format
         #[arg(long, default_value = "text")]
         format: OutputFormat,
+
+        /// Include raw secret values in JSON output
+        #[arg(long)]
+        show_secrets: bool,
     },
 
     /// List detectable patterns (the magpie is attracted to shiny things)

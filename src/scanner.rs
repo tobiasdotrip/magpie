@@ -45,11 +45,8 @@ pub fn walk_diffs(
         };
 
         let mut diff_opts = DiffOptions::new();
-        let diff = repo.diff_tree_to_tree(
-            parent_tree.as_ref(),
-            Some(&tree),
-            Some(&mut diff_opts),
-        )?;
+        let diff =
+            repo.diff_tree_to_tree(parent_tree.as_ref(), Some(&tree), Some(&mut diff_opts))?;
 
         diff.foreach(
             &mut |_, _| true,
@@ -121,7 +118,9 @@ mod tests {
         let (lines, _) = walk_diffs(dir.path(), None).unwrap();
 
         assert!(!lines.is_empty());
-        assert!(lines.iter().any(|l| l.content.contains("AKIAIOSFODNN7EXAMPLE")));
+        assert!(lines
+            .iter()
+            .any(|l| l.content.contains("AKIAIOSFODNN7EXAMPLE")));
         assert!(lines.iter().any(|l| l.file_path == "secret.env"));
     }
 
@@ -179,6 +178,8 @@ mod tests {
         let dir = create_test_repo();
         let fake_oid = git2::Oid::from_str("0000000000000000000000000000000000000000").unwrap();
         let (lines, _) = walk_diffs(dir.path(), Some(fake_oid)).unwrap();
-        assert!(lines.iter().any(|l| l.content.contains("AKIAIOSFODNN7EXAMPLE")));
+        assert!(lines
+            .iter()
+            .any(|l| l.content.contains("AKIAIOSFODNN7EXAMPLE")));
     }
 }
