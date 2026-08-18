@@ -19,7 +19,11 @@ struct ShinyJson {
 pub fn render_text(rules: &[CompiledRule], builtin_ids: &[String]) -> String {
     let mut out = String::new();
 
-    let max_id_len = rules.iter().map(|r| r.definition.id.len()).max().unwrap_or(0);
+    let max_id_len = rules
+        .iter()
+        .map(|r| r.definition.id.len())
+        .max()
+        .unwrap_or(0);
 
     for rule in rules {
         let is_custom = !builtin_ids.contains(&rule.definition.id);

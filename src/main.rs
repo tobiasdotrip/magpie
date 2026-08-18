@@ -8,8 +8,13 @@ fn main() {
     let args = cli::Cli::parse();
 
     match args.command {
-        cli::Commands::Scan { path, format, full } => {
-            let (result, head_oid, root) = match magpie::run_scan(&path, full) {
+        cli::Commands::Scan {
+            path,
+            format,
+            show_secrets,
+            full,
+        } => {
+            let (result, head_oid, root, rules_signature) = match magpie::run_scan(&path, full) {
                 Ok(r) => r,
                 Err(e) => {
                     eprintln!("Error: {e}");
@@ -19,27 +24,32 @@ fn main() {
 
             let output = match format {
                 cli::OutputFormat::Text => magpie::output::text::render(&result),
-                cli::OutputFormat::Json => magpie::output::json::render(&result),
+                cli::OutputFormat::Json => magpie::output::json::render(&result, show_secrets),
             };
             print!("{output}");
-
-            if let Err(e) = magpie::state::write(&root, head_oid) {
-                eprintln!("warning: could not write .magpie-state: {e}");
-            }
 
             if let Err(e) = magpie::nest::persist(&root, &result, Some(&head_oid.to_string())) {
                 eprintln!("warning: could not write to nest database: {e}");
             }
 
-            let has_high = result.findings.iter().any(|f| {
-                f.confidence == magpie::models::Confidence::High
-            });
+            let has_high = result
+                .findings
+                .iter()
+                .any(|f| f.confidence == magpie::models::Confidence::High);
             if has_high {
                 process::exit(1);
             }
+
+            if let Err(e) = magpie::state::write(&root, head_oid, &rules_signature) {
+                eprintln!("warning: could not write .magpie-state: {e}");
+            }
         }
 
-        cli::Commands::Watch { path, format } => {
+        cli::Commands::Watch {
+            path,
+            format,
+            show_secrets,
+        } => {
             let root = magpie::resolve_root(&path).ok();
 
             let result = match magpie::run_watch(&path) {
@@ -51,13 +61,18 @@ fn main() {
             };
 
             if result.findings.is_empty() && result.files_scanned == 0 {
-                println!("nothing staged");
+                match format {
+                    cli::OutputFormat::Text => println!("nothing staged"),
+                    cli::OutputFormat::Json => {
+                        print!("{}", magpie::output::json::render(&result, show_secrets));
+                    }
+                }
                 return;
             }
 
             let output = match format {
                 cli::OutputFormat::Text => magpie::output::text::render(&result),
-                cli::OutputFormat::Json => magpie::output::json::render(&result),
+                cli::OutputFormat::Json => magpie::output::json::render(&result, show_secrets),
             };
             print!("{output}");
 
@@ -67,9 +82,10 @@ fn main() {
                 }
             }
 
-            let has_high = result.findings.iter().any(|f| {
-                f.confidence == magpie::models::Confidence::High
-            });
+            let has_high = result
+                .findings
+                .iter()
+                .any(|f| f.confidence == magpie::models::Confidence::High);
             if has_high {
                 process::exit(1);
             }

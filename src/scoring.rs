@@ -3,6 +3,7 @@ use crate::models::{Confidence, RuleDefinition};
 
 const HIGH_CONFIDENCE_RULES: &[&str] = &[
     "aws-access-key-id",
+    "aws-secret-access-key",
     "github-token",
     "github-oauth",
     "private-key",
@@ -11,7 +12,8 @@ const HIGH_CONFIDENCE_RULES: &[&str] = &[
 const SENSITIVE_EXTENSIONS: &[&str] = &[".env", ".pem", ".key", ".secret", ".credentials"];
 
 const TEST_INDICATORS: &[&str] = &[
-    "test", "fixture", "mock", "fake", "example", "sample", "dummy",
+    "test", "tests", "fixture", "fixtures", "mock", "mocks", "fake", "fakes", "example",
+    "examples", "sample", "samples", "dummy", "dummies",
 ];
 
 const ENTROPY_THRESHOLD: f64 = 4.0;
@@ -19,12 +21,15 @@ const ENTROPY_THRESHOLD: f64 = 4.0;
 pub fn score_finding(rule: &RuleDefinition, matched_text: &str, file_path: &str) -> Confidence {
     let file_lower = file_path.to_lowercase();
 
-    if TEST_INDICATORS.iter().any(|t| file_lower.contains(t)) {
-        return Confidence::Low;
-    }
-
     if HIGH_CONFIDENCE_RULES.contains(&rule.id.as_str()) {
         return Confidence::High;
+    }
+
+    if file_lower
+        .split(|c: char| !c.is_alphanumeric())
+        .any(|token| TEST_INDICATORS.contains(&token))
+    {
+        return Confidence::Low;
     }
 
     let in_sensitive_file = SENSITIVE_EXTENSIONS
@@ -62,13 +67,41 @@ mod tests {
     }
 
     #[test]
-    fn test_file_lowers_confidence() {
+    fn strong_rule_stays_high_in_test_file() {
+        for id in [
+            "aws-access-key-id",
+            "aws-secret-access-key",
+            "github-token",
+            "github-oauth",
+            "private-key",
+        ] {
+            let c = score_finding(
+                &rule(id),
+                "known-specific-secret",
+                "tests/fixtures/test_data.rs",
+            );
+            assert_eq!(c, Confidence::High, "{id}");
+        }
+    }
+
+    #[test]
+    fn actual_test_path_lowers_generic_confidence() {
         let c = score_finding(
-            &rule("aws-access-key-id"),
-            "AKIAIOSFODNN7EXAMPLE",
-            "tests/fixtures/test_data.rs",
+            &rule("generic-secret"),
+            "aB3$kL9!mZ2@pQ7&xY5#",
+            "tests/fixtures/config.rs",
         );
         assert_eq!(c, Confidence::Low);
+    }
+
+    #[test]
+    fn indicator_substring_does_not_lower_confidence() {
+        let c = score_finding(
+            &rule("generic-secret"),
+            "aB3$kL9!mZ2@pQ7&xY5#",
+            "config/latest.env",
+        );
+        assert_eq!(c, Confidence::High);
     }
 
     #[test]

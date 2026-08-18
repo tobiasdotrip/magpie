@@ -19,7 +19,10 @@ impl Allowlist {
     pub fn is_allowed(&self, finding: &Finding) -> bool {
         self.entries.iter().any(|entry| {
             entry.rule_id == finding.rule_id
-                && self.globs.matches(&finding.file_path).contains(&entry.glob_index)
+                && self
+                    .globs
+                    .matches(&finding.file_path)
+                    .contains(&entry.glob_index)
                 && entry
                     .commit_sha
                     .as_deref()
@@ -127,11 +130,7 @@ mod tests {
             "src/tests/fixture.rs",
             "abc1234"
         )));
-        assert!(!al.is_allowed(&make_finding(
-            "aws-access-key-id",
-            "src/main.rs",
-            "abc1234"
-        )));
+        assert!(!al.is_allowed(&make_finding("aws-access-key-id", "src/main.rs", "abc1234")));
         assert!(!al.is_allowed(&make_finding(
             "github-token",
             "src/tests/fixture.rs",

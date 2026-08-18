@@ -105,9 +105,30 @@ fn scan_json_output_is_valid() {
         "Should have at least one finding"
     );
     assert!(
-        stdout.contains("AKIAIOSFODNN7EXAMPLE"),
-        "JSON output should contain full (non-redacted) matched text"
+        stdout.contains("AKIA****"),
+        "JSON output should redact secrets"
     );
+    assert!(!stdout.contains("AKIAIOSFODNN7EXAMPLE"));
+}
+
+#[test]
+fn scan_json_can_show_secrets_explicitly() {
+    let dir = create_repo_with_secret();
+    let bin = env!("CARGO_BIN_EXE_magpie");
+
+    let output = Command::new(bin)
+        .args([
+            "scan",
+            dir.path().to_str().unwrap(),
+            "--format",
+            "json",
+            "--show-secrets",
+        ])
+        .output()
+        .unwrap();
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("AKIAIOSFODNN7EXAMPLE"));
 }
 
 #[test]
@@ -115,12 +136,28 @@ fn incremental_scan_skips_already_scanned_commits() {
     let dir = create_repo_with_secret();
     let bin = env!("CARGO_BIN_EXE_magpie");
 
-    // First scan (full) — creates .magpie-state
+    // A failed scan must not advance state or hide an unresolved secret.
     let output = Command::new(bin)
         .args(["scan", dir.path().to_str().unwrap()])
         .output()
         .unwrap();
     assert!(!output.status.success());
+    assert!(!dir.path().join(".magpie-state").exists());
+
+    let output = Command::new(bin)
+        .args(["scan", dir.path().to_str().unwrap()])
+        .output()
+        .unwrap();
+    assert!(!output.status.success());
+    assert!(String::from_utf8_lossy(&output.stdout).contains("aws-access-key-id"));
+
+    std::fs::write(dir.path().join(".magpie-allow"), "aws-access-key-id:.env\n").unwrap();
+
+    let output = Command::new(bin)
+        .args(["scan", dir.path().to_str().unwrap()])
+        .output()
+        .unwrap();
+    assert!(output.status.success());
     assert!(dir.path().join(".magpie-state").exists());
 
     // Add a clean commit
@@ -134,7 +171,10 @@ fn incremental_scan_skips_already_scanned_commits() {
         .output()
         .unwrap();
     let stdout = String::from_utf8_lossy(&output.stdout);
-    assert!(output.status.success(), "Incremental scan should exit 0 for clean new commits");
+    assert!(
+        output.status.success(),
+        "Incremental scan should exit 0 for clean new commits"
+    );
     assert!(stdout.contains("(incremental)"));
 
     // Verify .magpie-state updated to new HEAD
@@ -165,7 +205,10 @@ fn full_flag_forces_full_scan() {
         .output()
         .unwrap();
     let stdout = String::from_utf8_lossy(&output.stdout);
-    assert!(!output.status.success(), "Full scan should still find secrets");
+    assert!(
+        !output.status.success(),
+        "Full scan should still find secrets"
+    );
     assert!(stdout.contains("(full)"));
 }
 
@@ -174,17 +217,17 @@ fn allowlist_suppresses_findings() {
     let dir = create_repo_with_secret();
     let bin = env!("CARGO_BIN_EXE_magpie");
 
-    std::fs::write(
-        dir.path().join(".magpie-allow"),
-        "aws-access-key-id:.env\n",
-    ).unwrap();
+    std::fs::write(dir.path().join(".magpie-allow"), "aws-access-key-id:.env\n").unwrap();
 
     let output = Command::new(bin)
         .args(["scan", "--full", dir.path().to_str().unwrap()])
         .output()
         .unwrap();
 
-    assert!(output.status.success(), "Allowlisted finding should not cause exit 1");
+    assert!(
+        output.status.success(),
+        "Allowlisted finding should not cause exit 1"
+    );
 }
 
 #[test]
@@ -198,32 +241,42 @@ fn allowlist_with_commit_pin() {
         .current_dir(dir.path())
         .output()
         .unwrap();
-    let full_sha = String::from_utf8_lossy(&sha_output.stdout).trim().to_string();
+    let full_sha = String::from_utf8_lossy(&sha_output.stdout)
+        .trim()
+        .to_string();
     let sha = &full_sha[..7];
 
     // Allowlist with correct commit
     std::fs::write(
         dir.path().join(".magpie-allow"),
         format!("aws-access-key-id:.env:{sha}\n"),
-    ).unwrap();
+    )
+    .unwrap();
 
     let output = Command::new(bin)
         .args(["scan", "--full", dir.path().to_str().unwrap()])
         .output()
         .unwrap();
-    assert!(output.status.success(), "Correct commit pin should suppress finding");
+    assert!(
+        output.status.success(),
+        "Correct commit pin should suppress finding"
+    );
 
     // Allowlist with wrong commit
     std::fs::write(
         dir.path().join(".magpie-allow"),
         "aws-access-key-id:.env:0000000\n",
-    ).unwrap();
+    )
+    .unwrap();
 
     let output = Command::new(bin)
         .args(["scan", "--full", dir.path().to_str().unwrap()])
         .output()
         .unwrap();
-    assert!(!output.status.success(), "Wrong commit pin should not suppress finding");
+    assert!(
+        !output.status.success(),
+        "Wrong commit pin should not suppress finding"
+    );
 }
 
 #[test]
@@ -275,6 +328,21 @@ fn watch_nothing_staged_exits_zero() {
 }
 
 #[test]
+fn watch_nothing_staged_returns_valid_json() {
+    let dir = create_clean_repo();
+    let bin = env!("CARGO_BIN_EXE_magpie");
+
+    let output = Command::new(bin)
+        .args(["watch", dir.path().to_str().unwrap(), "--format", "json"])
+        .output()
+        .unwrap();
+    let parsed: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert!(output.status.success());
+    assert_eq!(parsed["mode"], "watch");
+    assert_eq!(parsed["findings"].as_array().unwrap().len(), 0);
+}
+
+#[test]
 fn watch_respects_allowlist() {
     let dir = TempDir::new().unwrap();
     let p = dir.path();
@@ -295,7 +363,10 @@ fn watch_respects_allowlist() {
         .args(["watch", p.to_str().unwrap()])
         .output()
         .unwrap();
-    assert!(output.status.success(), "Allowlisted staged finding should not cause exit 1");
+    assert!(
+        output.status.success(),
+        "Allowlisted staged finding should not cause exit 1"
+    );
 }
 
 #[test]
@@ -317,7 +388,8 @@ id = "custom-key"
 description = "Custom Key"
 pattern = 'CUSTOM_[A-Z]{10}'
 "#,
-    ).unwrap();
+    )
+    .unwrap();
     run_git(p, &["add", "."]);
     run_git(p, &["commit", "-m", "init"]);
 
@@ -343,13 +415,17 @@ fn scan_with_disable_rules() {
 [config]
 disable_rules = ["aws-access-key-id"]
 "#,
-    ).unwrap();
+    )
+    .unwrap();
 
     let output = Command::new(bin)
         .args(["scan", "--full", p.to_str().unwrap()])
         .output()
         .unwrap();
-    assert!(output.status.success(), "Disabled rule should not produce findings");
+    assert!(
+        output.status.success(),
+        "Disabled rule should not produce findings"
+    );
 }
 
 #[test]

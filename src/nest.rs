@@ -4,6 +4,15 @@ use std::path::Path;
 use crate::models::{Confidence, ScanMode, ScanResult};
 
 const DB_FILE: &str = ".magpie.db";
+const REDACTED_SECRET: &str = "[redacted]";
+
+fn scrub_stored_secrets(conn: &Connection) -> rusqlite::Result<()> {
+    conn.execute(
+        "UPDATE findings SET matched_text = ?1 WHERE matched_text != ?1",
+        [REDACTED_SECRET],
+    )?;
+    Ok(())
+}
 
 pub fn db_exists(repo_root: &Path) -> bool {
     repo_root.join(DB_FILE).exists()
@@ -31,8 +40,9 @@ pub fn init_db(repo_root: &Path) -> Result<(), Box<dyn std::error::Error>> {
             commit_sha TEXT NOT NULL,
             line_number INTEGER NOT NULL,
             confidence TEXT NOT NULL
-        );"
+        );",
     )?;
+    scrub_stored_secrets(&conn)?;
     Ok(())
 }
 
@@ -50,6 +60,7 @@ pub fn persist(
     }
 
     let conn = Connection::open(repo_root.join(DB_FILE))?;
+    scrub_stored_secrets(&conn)?;
 
     let mode = match result.mode {
         ScanMode::Full => "full",
@@ -85,7 +96,7 @@ pub fn persist(
                 scan_id,
                 finding.rule_id,
                 finding.description,
-                finding.matched_text,
+                REDACTED_SECRET,
                 finding.file_path,
                 finding.commit_sha,
                 finding.line_number as i64,
@@ -117,24 +128,49 @@ pub fn dashboard(repo_root: &Path) -> Result<String, Box<dyn std::error::Error>>
     )?;
 
     // Last scan breakdown
-    let last_high: i64 = conn.query_row("SELECT count(*) FROM findings WHERE scan_id = ?1 AND confidence = 'high'", [last_scan_id], |r| r.get(0))?;
-    let last_medium: i64 = conn.query_row("SELECT count(*) FROM findings WHERE scan_id = ?1 AND confidence = 'medium'", [last_scan_id], |r| r.get(0))?;
-    let last_low: i64 = conn.query_row("SELECT count(*) FROM findings WHERE scan_id = ?1 AND confidence = 'low'", [last_scan_id], |r| r.get(0))?;
+    let last_high: i64 = conn.query_row(
+        "SELECT count(*) FROM findings WHERE scan_id = ?1 AND confidence = 'high'",
+        [last_scan_id],
+        |r| r.get(0),
+    )?;
+    let last_medium: i64 = conn.query_row(
+        "SELECT count(*) FROM findings WHERE scan_id = ?1 AND confidence = 'medium'",
+        [last_scan_id],
+        |r| r.get(0),
+    )?;
+    let last_low: i64 = conn.query_row(
+        "SELECT count(*) FROM findings WHERE scan_id = ?1 AND confidence = 'low'",
+        [last_scan_id],
+        |r| r.get(0),
+    )?;
     let last_total = last_high + last_medium + last_low;
 
     // Global stats
     let total_findings: i64 = conn.query_row("SELECT count(*) FROM findings", [], |r| r.get(0))?;
-    let global_high: i64 = conn.query_row("SELECT count(*) FROM findings WHERE confidence = 'high'", [], |r| r.get(0))?;
-    let global_medium: i64 = conn.query_row("SELECT count(*) FROM findings WHERE confidence = 'medium'", [], |r| r.get(0))?;
-    let global_low: i64 = conn.query_row("SELECT count(*) FROM findings WHERE confidence = 'low'", [], |r| r.get(0))?;
+    let global_high: i64 = conn.query_row(
+        "SELECT count(*) FROM findings WHERE confidence = 'high'",
+        [],
+        |r| r.get(0),
+    )?;
+    let global_medium: i64 = conn.query_row(
+        "SELECT count(*) FROM findings WHERE confidence = 'medium'",
+        [],
+        |r| r.get(0),
+    )?;
+    let global_low: i64 = conn.query_row(
+        "SELECT count(*) FROM findings WHERE confidence = 'low'",
+        [],
+        |r| r.get(0),
+    )?;
 
     // Top rules (global)
     let mut stmt = conn.prepare(
-        "SELECT rule_id, count(*) as c FROM findings GROUP BY rule_id ORDER BY c DESC LIMIT 5"
+        "SELECT rule_id, count(*) as c FROM findings GROUP BY rule_id ORDER BY c DESC LIMIT 5",
     )?;
-    let top_rules: Vec<(String, i64)> = stmt.query_map([], |r| {
-        Ok((r.get(0)?, r.get(1)?))
-    })?.filter_map(|r| r.ok()).collect();
+    let top_rules: Vec<(String, i64)> = stmt
+        .query_map([], |r| Ok((r.get(0)?, r.get(1)?)))?
+        .filter_map(|r| r.ok())
+        .collect();
 
     let top_rules_str = top_rules
         .iter()
@@ -143,10 +179,18 @@ pub fn dashboard(repo_root: &Path) -> Result<String, Box<dyn std::error::Error>>
         .join(", ");
 
     let mut out = String::new();
-    out.push_str(&format!("Last scan: {created_at} ({mode}, {commits} commits, {files} files)\n"));
-    out.push_str(&format!("  {last_total} findings: {last_high} high, {last_medium} medium, {last_low} low\n"));
-    out.push_str(&format!("\nHistory: {scan_count} scans, {total_findings} total findings\n"));
-    out.push_str(&format!("  By confidence: {global_high} high, {global_medium} medium, {global_low} low\n"));
+    out.push_str(&format!(
+        "Last scan: {created_at} ({mode}, {commits} commits, {files} files)\n"
+    ));
+    out.push_str(&format!(
+        "  {last_total} findings: {last_high} high, {last_medium} medium, {last_low} low\n"
+    ));
+    out.push_str(&format!(
+        "\nHistory: {scan_count} scans, {total_findings} total findings\n"
+    ));
+    out.push_str(&format!(
+        "  By confidence: {global_high} high, {global_medium} medium, {global_low} low\n"
+    ));
     if !top_rules_str.is_empty() {
         out.push_str(&format!("  Top rules: {top_rules_str}\n"));
     }
@@ -176,8 +220,12 @@ mod tests {
         assert!(dir.path().join(".magpie.db").exists());
 
         let conn = Connection::open(dir.path().join(".magpie.db")).unwrap();
-        let _: i64 = conn.query_row("SELECT count(*) FROM scans", [], |r| r.get(0)).unwrap();
-        let _: i64 = conn.query_row("SELECT count(*) FROM findings", [], |r| r.get(0)).unwrap();
+        let _: i64 = conn
+            .query_row("SELECT count(*) FROM scans", [], |r| r.get(0))
+            .unwrap();
+        let _: i64 = conn
+            .query_row("SELECT count(*) FROM findings", [], |r| r.get(0))
+            .unwrap();
     }
 
     #[test]
@@ -236,10 +284,45 @@ mod tests {
         persist(dir.path(), &result, Some("abc1234def5678")).unwrap();
 
         let conn = Connection::open(dir.path().join(".magpie.db")).unwrap();
-        let scan_count: i64 = conn.query_row("SELECT count(*) FROM scans", [], |r| r.get(0)).unwrap();
-        let finding_count: i64 = conn.query_row("SELECT count(*) FROM findings", [], |r| r.get(0)).unwrap();
+        let scan_count: i64 = conn
+            .query_row("SELECT count(*) FROM scans", [], |r| r.get(0))
+            .unwrap();
+        let finding_count: i64 = conn
+            .query_row("SELECT count(*) FROM findings", [], |r| r.get(0))
+            .unwrap();
         assert_eq!(scan_count, 1);
         assert_eq!(finding_count, 2);
+        let matched_text: String = conn
+            .query_row("SELECT matched_text FROM findings LIMIT 1", [], |r| {
+                r.get(0)
+            })
+            .unwrap();
+        assert_eq!(matched_text, REDACTED_SECRET);
+    }
+
+    #[test]
+    fn init_db_scrubs_secrets_from_existing_database() {
+        let dir = TempDir::new().unwrap();
+        init_db(dir.path()).unwrap();
+        let result = make_result(ScanMode::Full, vec![make_finding("test", Confidence::High)]);
+        persist(dir.path(), &result, Some("abc")).unwrap();
+
+        let conn = Connection::open(dir.path().join(".magpie.db")).unwrap();
+        conn.execute(
+            "UPDATE findings SET matched_text = 'AKIAIOSFODNN7EXAMPLE'",
+            [],
+        )
+        .unwrap();
+        drop(conn);
+
+        init_db(dir.path()).unwrap();
+        let conn = Connection::open(dir.path().join(".magpie.db")).unwrap();
+        let matched_text: String = conn
+            .query_row("SELECT matched_text FROM findings LIMIT 1", [], |r| {
+                r.get(0)
+            })
+            .unwrap();
+        assert_eq!(matched_text, REDACTED_SECRET);
     }
 
     #[test]
@@ -251,9 +334,9 @@ mod tests {
         persist(dir.path(), &result, None).unwrap();
 
         let conn = Connection::open(dir.path().join(".magpie.db")).unwrap();
-        let head: Option<String> = conn.query_row(
-            "SELECT head_sha FROM scans WHERE id = 1", [], |r| r.get(0)
-        ).unwrap();
+        let head: Option<String> = conn
+            .query_row("SELECT head_sha FROM scans WHERE id = 1", [], |r| r.get(0))
+            .unwrap();
         assert!(head.is_none());
     }
 

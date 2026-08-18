@@ -6,7 +6,7 @@ use crate::scoring::score_finding;
 pub fn scan_line(line: &DiffLine, rules: &[CompiledRule]) -> Vec<Finding> {
     let mut findings = Vec::new();
     for rule in rules {
-        if let Some(caps) = rule.regex.captures(&line.content) {
+        for caps in rule.regex.captures_iter(&line.content) {
             let full_match = caps.get(0).unwrap().as_str();
             let scoring_text = caps.get(1).map(|m| m.as_str()).unwrap_or(full_match);
 
@@ -70,6 +70,24 @@ mod tests {
         let line = make_line("let x = 42;", "main.rs");
         let matches = scan_line(&line, &rules);
         assert!(matches.is_empty());
+    }
+
+    #[test]
+    fn detects_every_occurrence_of_the_same_rule() {
+        let rules = load_builtin_rules().unwrap();
+        let line = make_line(
+            "primary=AKIAIOSFODNN7EXAMPLE backup=AKIA1234567890ABCDEF",
+            "config.env",
+        );
+        let matches = scan_line(&line, &rules);
+        let aws_matches: Vec<_> = matches
+            .iter()
+            .filter(|finding| finding.rule_id == "aws-access-key-id")
+            .collect();
+
+        assert_eq!(aws_matches.len(), 2);
+        assert_eq!(aws_matches[0].matched_text, "AKIAIOSFODNN7EXAMPLE");
+        assert_eq!(aws_matches[1].matched_text, "AKIA1234567890ABCDEF");
     }
 
     #[test]
