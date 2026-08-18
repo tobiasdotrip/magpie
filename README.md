@@ -3,7 +3,7 @@
   <h1 align="center">magpie</h1>
   <p align="center"><em>Fast, zero-config git secret scanner. Single binary, built-in rules, confidence scoring.</em></p>
   <p align="center">
-    <img src="https://img.shields.io/badge/version-0.5.0-blue" alt="version">
+    <img src="https://img.shields.io/github/v/release/tobiasdotrip/magpie" alt="latest release">
     <img src="https://img.shields.io/badge/rust-2021-orange" alt="rust">
   </p>
 </p>
@@ -17,8 +17,7 @@ Build from source:
 ```bash
 git clone https://github.com/tobiasdotrip/magpie.git
 cd magpie
-cargo build --release
-# Binary at target/release/magpie
+cargo install --locked --path .
 ```
 
 ## Quick start
@@ -49,20 +48,22 @@ magpie scan --format json
   2 findings: 1 high, 1 medium, 0 low
 ```
 
-Secrets are redacted in terminal output. JSON output (`--format json`) includes the full matched text for machine consumption.
+Secrets are redacted by default in both terminal and JSON output. To include raw values in JSON, explicitly pass `--show-secrets`; avoid doing so in shared terminals or CI logs.
+
+If magpie finds a real credential, revoke or rotate it first. Cleaning the Git history afterwards does not invalidate a secret that may already have been copied.
 
 ## Built-in rules
 
-| Rule | Description | Example |
-|------|-------------|---------|
-| `aws-access-key-id` | AWS Access Key ID | `AKIA...` |
-| `aws-secret-access-key` | AWS Secret Access Key | `aws_secret_access_key = ...` |
-| `github-token` | GitHub Personal Access Token | `ghp_...`, `github_pat_...` |
-| `github-oauth` | GitHub OAuth Token | `gho_...` |
-| `generic-api-key` | Generic API Key assignment | `api_key = ...` |
-| `private-key` | Private Key (PEM) | `-----BEGIN PRIVATE KEY-----` |
-| `jwt` | JSON Web Token | `eyJ...` |
-| `generic-secret` | Generic secret/password/token | `password = ...` |
+| Rule                    | Description                   | Example                       |
+| ----------------------- | ----------------------------- | ----------------------------- |
+| `aws-access-key-id`     | AWS Access Key ID             | `AKIA...`                     |
+| `aws-secret-access-key` | AWS Secret Access Key         | `aws_secret_access_key = ...` |
+| `github-token`          | GitHub Personal Access Token  | `ghp_...`, `github_pat_...`   |
+| `github-oauth`          | GitHub OAuth Token            | `gho_...`                     |
+| `generic-api-key`       | Generic API Key assignment    | `api_key = ...`               |
+| `private-key`           | Private Key (PEM)             | `-----BEGIN PRIVATE KEY-----` |
+| `jwt`                   | JSON Web Token                | `eyJ...`                      |
+| `generic-secret`        | Generic secret/password/token | `password = ...`              |
 
 ## Confidence scoring
 
@@ -72,35 +73,46 @@ Each finding gets a confidence level based on contextual signals:
 
 **Medium** — Generic pattern with high Shannon entropy (> 4.0). Likely a real secret, but could be a hash or random identifier.
 
-**Low** — Generic pattern with low entropy, or any finding in test/example/fixture files.
+**Low** — Generic pattern with low entropy, or a generic finding in test/example/fixture files. Specific credential formats remain high confidence in every path.
 
 ## CI usage
 
 magpie exits with code **1** if any **High** confidence finding is detected.
 
 ```yaml
-# GitHub Actions
-- name: Scan for secrets
-  run: magpie scan
+name: Secret scan
+on: [push, pull_request]
 
-# GitLab CI
-secret-scan:
-  script: magpie scan
+jobs:
+  magpie:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Install magpie
+        run: cargo install --locked --git https://github.com/tobiasdotrip/magpie.git
+      - name: Scan full history
+        run: magpie scan --full
 ```
 
 JSON output for programmatic consumption:
 
 ```bash
 magpie scan --format json | jq '.findings[] | select(.confidence == "High")'
+
+# Reveal raw matches only when a trusted downstream consumer requires them
+magpie scan --format json --show-secrets
 ```
 
 ## Exit codes
 
-| Code | Meaning |
-|------|---------|
-| 0 | Scan completed, no high-confidence findings |
-| 1 | Scan completed, high-confidence findings detected |
-| 2 | Technical error (git2 failure, rule loading error) |
+| Code | Meaning                                            |
+| ---- | -------------------------------------------------- |
+| 0    | Scan completed, no high-confidence findings        |
+| 1    | Scan completed, high-confidence findings detected  |
+| 2    | Technical error (git2 failure, rule loading error) |
 
 ## Allowlist
 
@@ -182,7 +194,7 @@ History: 12 scans, 47 total findings
 
 ## Incremental scan
 
-After the first scan, magpie stores the last scanned commit in `.magpie-state` and only scans new commits on subsequent runs.
+After the first successful scan, magpie stores the last scanned commit and active rule signature in `.magpie-state`, then only scans new commits while those rules remain unchanged. A scan with high-confidence findings does not advance the state, so unresolved secrets remain visible.
 
 ```bash
 magpie scan          # First run: full scan. Next runs: incremental.
@@ -209,5 +221,16 @@ Custom rules from `.magpie.toml` are tagged `[custom]`. Disabled rules are exclu
 3. Matches each line against built-in regex rules
 4. If a rule has a capture group, the captured value is scored separately (avoids diluting entropy with prefixes like `password=`)
 5. Scores confidence using: pattern specificity, file path, Shannon entropy
-6. Outputs findings sorted by confidence
+6. Outputs findings with confidence and commit context
 
+## Limitations
+
+- Pattern and entropy matching can produce false positives and false negatives; magpie complements review and credential scanning controls rather than replacing them.
+- History scans inspect UTF-8 added lines from commits reachable from the current `HEAD`. Binary data, deleted-only content, unreachable commits, other refs, and submodules are not exhaustively scanned.
+- Merge commits are compared with their first parent, and incremental scans rely on the local `.magpie-state`; use `scan --full` in CI or after history changes.
+
+## License
+
+Licensed under either of the [Apache License, Version 2.0](LICENSE-APACHE) or the [MIT license](LICENSE-MIT), at your option.
+
+Unless you explicitly state otherwise, any contribution intentionally submitted for inclusion in this project by you, as defined in the Apache-2.0 license, shall be dual licensed as above, without any additional terms or conditions.
